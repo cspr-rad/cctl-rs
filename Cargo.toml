@@ -1,0 +1,31 @@
+[package]
+name = "cctl-rs"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "cctld"
+path = "bin/cctld.rs"
+version = "0.1.0"
+test = false
+bench = false
+
+[lib]
+name = "cctl"
+path = "src/lib.rs"
+
+[dependencies]
+
+anyhow = "1"
+backoff = { version = "0.4", features = ["tokio", "futures"]}
+clap = { version = "4", features = ["derive"] }
+casper-client = "2.0"
+casper-types = "3.0"
+nom = "7"
+hex = "0.4"
+sd-notify = "0.4"
+tokio = { version = "1", features = [ "full", "tracing", "macros" ] }
+tempfile = "3"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["std", "env-filter"] }
