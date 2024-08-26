@@ -1,7 +1,7 @@
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 use casper_client::{get_node_status, rpcs::results::ReactorState, JsonRpcId, Verbosity};
-use cctl::cctl::{CCTLNetwork, NodeState};
+use cctl::{CCTLNetwork, NodeState};
 
 fn tracing_init() {
     let _ = tracing_subscriber::registry()

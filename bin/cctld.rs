@@ -1,11 +1,8 @@
 use casper_types::{runtime_args, RuntimeArgs};
-use cctl::cctl;
 use clap::Parser;
 use sd_notify::NotifyState;
 use std::path::PathBuf;
 use tokio::signal;
-
-use crate::cctl::DeployableContract;
 
 #[derive(Parser)]
 pub struct Cli {
@@ -24,7 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
     let deploy_contract = cli.deploy_contract.map(|deploy_contracts_arg| {
         match deploy_contracts_arg.split_once(':') {
-            Some((hash_name, path)) => DeployableContract {
+            Some((hash_name, path)) => cctl::DeployableContract {
                 hash_name: hash_name.to_string(),
                 // FIXME at some point we want to make this parametrizable
                 runtime_args: runtime_args! { "initial_trie_root" => Option::<[u8; 32]>::None },

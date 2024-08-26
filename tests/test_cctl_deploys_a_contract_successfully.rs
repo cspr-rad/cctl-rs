@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 use casper_types::{runtime_args, ContractHash, RuntimeArgs};
-use cctl::cctl::{CCTLNetwork, DeployableContract};
+use cctl::{CCTLNetwork, DeployableContract};
 
 fn tracing_init() {
     let _ = tracing_subscriber::registry()
