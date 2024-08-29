@@ -108,6 +108,8 @@
             });
 
             default = self'.packages.cctld;
+
+            cctl-docker-image = pkgs.callPackage ./docker-image.nix { inherit (self'.packages) cctld; };
           };
 
           checks = {
