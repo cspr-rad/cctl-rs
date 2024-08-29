@@ -28,8 +28,7 @@
     advisory-db.url = "github:rustsec/advisory-db";
     advisory-db.flake = false;
     cctl.url = "github:casper-network/cctl/947c34b991e37476db82ccfa2bd7c0312c1a91d7";
-    cctl-2.url = "github:casper-network/cctl";
-    csprpkgs.url = "github:cspr-rad/csprpkgs";
+    csprpkgs.url = "github:cspr-rad/csprpkgs/3bc835d3b73a5d5a5829f3b8506f51a9cd098abd";
   };
 
   outputs = inputs@{ flake-parts, treefmt-nix, ... }:
@@ -44,6 +43,7 @@
           rustToolchain = inputs'.fenix.packages.stable.toolchain;
           craneLib = (inputs.crane.mkLib pkgs).overrideToolchain rustToolchain;
 
+          # revision 3bc835d contains casper-node 1.5.7
           cctl = inputs'.cctl.packages.cctl.override { casper-node = inputs'.csprpkgs.packages.casper-node; };
 
           cctlAttrs = {
@@ -85,12 +85,9 @@
           };
 
           packages = {
-            cctl-rs-deps = craneLib.buildDepsOnly (cctlAttrs // {
-              pname = "cctl-rs-deps";
-            });
+            cctl-rs-deps = craneLib.buildDepsOnly cctlAttrs;
 
             cctl-rs-docs = craneLib.cargoDoc (cctlAttrs // {
-              pname = "cctl-rs-docs";
               cargoArtifacts = self'.packages.cctl-rs-deps;
             });
 
@@ -115,6 +112,7 @@
 
           checks = {
             lint = craneLib.cargoClippy (cctlAttrs // {
+              pname = "cctl-rs-lint";
               cargoArtifacts = self'.packages.cctl-rs-deps;
               cargoClippyExtraArgs = "--all-targets -- --deny warnings";
             });
