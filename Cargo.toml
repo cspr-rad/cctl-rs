@@ -22,6 +22,7 @@ backoff = { version = "0.4", features = ["tokio", "futures"]}
 clap = { version = "4", features = ["derive"] }
 casper-client = "2.0"
 casper-types = "3.0"
+itertools = "0.13"
 nom = "7"
 hex = "0.4"
 sd-notify = "0.4"

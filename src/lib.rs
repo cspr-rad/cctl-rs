@@ -3,6 +3,7 @@ pub mod parsers;
 use anyhow::anyhow;
 use backoff::{future::retry, ExponentialBackoff};
 use hex::FromHex;
+use itertools::{Either, Itertools};
 use std::env;
 use std::io::{self, Write};
 use std::path::PathBuf;
@@ -21,6 +22,8 @@ use casper_client::{
 };
 use casper_types::{ContractHash, ExecutionResult, Key, PublicKey, RuntimeArgs, SecretKey};
 
+use parsers::RawNodeType;
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum NodeState {
     Running,
@@ -28,12 +31,25 @@ pub enum NodeState {
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub struct CasperNodePorts {
-    pub consensus_port: u16,
+pub struct CasperSidecarPorts {
+    pub node_client_port: u16,
     pub rpc_port: u16,
+    pub speculative_exec_port: u16,
+}
+
+pub struct CasperSidecar {
+    pub id: u8,
+    pub validator_group_id: u8,
+    pub state: NodeState,
+    pub port: CasperSidecarPorts,
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct CasperNodePorts {
+    pub protocol_port: u16,
+    pub binary_port: u16,
     pub rest_port: u16,
     pub sse_port: u16,
-    pub speculative_exec_port: u16,
 }
 
 pub struct CasperNode {
@@ -45,7 +61,8 @@ pub struct CasperNode {
 
 pub struct CCTLNetwork {
     pub working_dir: PathBuf,
-    pub nodes: Vec<CasperNode>,
+    pub casper_nodes: Vec<CasperNode>,
+    pub casper_sidecars: Vec<CasperSidecar>,
 }
 
 pub struct DeployableContract {
@@ -122,6 +139,8 @@ impl CCTLNetwork {
         tracing::info!("{}", output);
         let (_, nodes) = parsers::parse_cctl_infra_net_start_lines(output).unwrap();
 
+        // Match the started nodes and sidecars with their respective ports
+
         tracing::info!("Fetching the networks node ports");
         let output = Command::new("cctl-infra-node-view-ports")
             .env("CCTL_ASSETS", &assets_dir)
@@ -131,68 +150,95 @@ impl CCTLNetwork {
         tracing::info!("{}", output);
         let (_, node_ports) = parsers::parse_cctl_infra_node_view_port_lines(output).unwrap();
 
-        // Match the started nodes with their respective ports
-        let nodes: Vec<CasperNode> = nodes
-            .into_iter()
-            .map(|(validator_group_id, node_id, state)| {
-                if let Some(&(_, port)) = node_ports
-                    .iter()
-                    .find(|(node_id_ports, _)| *node_id_ports == node_id)
-                {
-                    CasperNode {
-                        validator_group_id,
-                        state,
-                        id: node_id,
-                        port,
+        tracing::info!("Fetching the networks sidecar ports");
+        let output = Command::new("cctl-infra-sidecar-view-ports")
+            .env("CCTL_ASSETS", &assets_dir)
+            .output()
+            .expect("Failed to get the networks node ports");
+        let output = std::str::from_utf8(output.stdout.as_slice()).unwrap();
+        tracing::info!("{}", output);
+        let (_, sidecar_ports) = parsers::parse_cctl_infra_sidecar_view_port_lines(output).unwrap();
+
+        let (casper_nodes, casper_sidecars): (Vec<CasperNode>, Vec<CasperSidecar>) =
+            nodes.iter().partition_map(|node_type| match node_type {
+                RawNodeType::CasperNode(validator_group_id, node_id, state) => {
+                    if let Some(&(_, port)) = node_ports
+                        .iter()
+                        .find(|(node_id_ports, _)| node_id_ports == node_id)
+                    {
+                        Either::Left(CasperNode {
+                            validator_group_id: *validator_group_id,
+                            state: *state,
+                            id: *node_id,
+                            port,
+                        })
+                    } else {
+                        panic!("Can't find ports for node with id {}", node_id)
                     }
-                } else {
-                    panic!("Can't find ports for node with id {}", node_id)
                 }
-            })
-            .collect();
-
-        let node_port = nodes.first().unwrap().port.rpc_port;
-        let casper_node_rpc_url = format!("http://0.0.0.0:{node_port}/rpc");
-        const MAX_GENESIS_WAIT_TIME: Duration = Duration::from_secs(90);
-
-        let start_time = Instant::now();
-        tracing::info!("Waiting {MAX_GENESIS_WAIT_TIME:?} for the network to pass genesis");
-        retry(ExponentialBackoff::default(), || async {
-            // This prevents retrying forever even after ctrl-c
-            let timed_out = start_time.elapsed() > MAX_GENESIS_WAIT_TIME;
-
-            get_node_status(
-                JsonRpcId::Number(1),
-                &casper_node_rpc_url,
-                casper_client_verbosity(),
-            )
-            .await
-            .map_err(|err| {
-                let elapsed = start_time.elapsed().as_secs();
-                tracing::info!(
-                    "Waited for {elapsed}s to pass genesis, the last reported error was: {err:?}"
-                );
-                err
-            })
-            .map_err(|err| match &err {
-                err if timed_out => backoff::Error::permanent(anyhow!("Timeout on error: {err:?}")),
-                Error::ResponseIsHttpError { .. } | Error::FailedToGetResponse { .. } => {
-                    backoff::Error::transient(anyhow!(err))
+                RawNodeType::CasperSidecar(validator_group_id, node_id, state) => {
+                    if let Some(&(_, port)) = sidecar_ports
+                        .iter()
+                        .find(|(node_id_ports, _)| node_id_ports == node_id)
+                    {
+                        Either::Right(CasperSidecar {
+                            validator_group_id: *validator_group_id,
+                            state: *state,
+                            id: *node_id,
+                            port: CasperSidecarPorts {
+                                node_client_port: port.node_client_port,
+                                rpc_port: port.rpc_port,
+                                speculative_exec_port: port.speculative_exec_port,
+                            },
+                        })
+                    } else {
+                        panic!("Can't find ports for sidecar with id {}", node_id)
+                    }
                 }
-                _ => backoff::Error::permanent(anyhow!(err)),
-            })
-            .map(|success| match success.result.reactor_state {
-                ReactorState::Validate => Ok(()),
-                reactor_state if timed_out => Err(backoff::Error::permanent(anyhow!(
-                    "Node didn't reach the VALIDATE state before timeout: {reactor_state:?}"
-                ))),
-                _ => Err(backoff::Error::transient(anyhow!(
-                    "Node didn't reach the VALIDATE state yet"
-                ))),
-            })?
-        })
-        .await
-        .expect("Waiting for network to pass genesis failed");
+            });
+
+        // let node_port = casper_sidecars.first().unwrap().port.rpc_port;
+        // let casper_node_rpc_url = format!("http://0.0.0.0:{node_port}/rpc");
+
+        // const MAX_GENESIS_WAIT_TIME: Duration = Duration::from_secs(90);
+        // let start_time = Instant::now();
+        // tracing::info!("Waiting {MAX_GENESIS_WAIT_TIME:?} for the network to pass genesis");
+        // retry(ExponentialBackoff::default(), || async {
+        //     // This prevents retrying forever even after ctrl-c
+        //     let timed_out = start_time.elapsed() > MAX_GENESIS_WAIT_TIME;
+
+        //     get_node_status(
+        //         JsonRpcId::Number(1),
+        //         &casper_node_rpc_url,
+        //         casper_client_verbosity(),
+        //     )
+        //     .await
+        //     .map_err(|err| {
+        //         let elapsed = start_time.elapsed().as_secs();
+        //         tracing::info!(
+        //             "Waited for {elapsed}s to pass genesis, the last reported error was: {err:?}"
+        //         );
+        //         err
+        //     })
+        //     .map_err(|err| match &err {
+        //         err if timed_out => backoff::Error::permanent(anyhow!("Timeout on error: {err:?}")),
+        //         Error::ResponseIsHttpError { .. } | Error::FailedToGetResponse { .. } => {
+        //             backoff::Error::transient(anyhow!(err))
+        //         }
+        //         _ => backoff::Error::permanent(anyhow!(err)),
+        //     })
+        //     .map(|success| match success.result.reactor_state {
+        //         ReactorState::Validate => Ok(()),
+        //         reactor_state if timed_out => Err(backoff::Error::permanent(anyhow!(
+        //             "Node didn't reach the VALIDATE state before timeout: {reactor_state:?}"
+        //         ))),
+        //         _ => Err(backoff::Error::transient(anyhow!(
+        //             "Node didn't reach the VALIDATE state yet"
+        //         ))),
+        //     })?
+        // })
+        // .await
+        // .expect("Waiting for network to pass genesis failed");
 
         tracing::info!("Waiting for block 1");
         let output = Command::new("cctl-chain-await-until-block-n")
@@ -203,31 +249,35 @@ impl CCTLNetwork {
         let output = std::str::from_utf8(output.stdout.as_slice()).unwrap();
         tracing::info!("{}", output);
 
-        if let Some(contract_to_deploy) = contract_to_deploy {
-            let deployer_skey =
-                SecretKey::from_file(working_dir.join("assets/users/user-1/secret_key.pem"))?;
-            let deployer_pkey =
-                PublicKey::from_file(working_dir.join("assets/users/user-1/public_key.pem"))?;
+        //if let Some(contract_to_deploy) = contract_to_deploy {
+        //    let deployer_skey =
+        //        SecretKey::from_file(working_dir.join("assets/users/user-1/secret_key.pem"))?;
+        //    let deployer_pkey =
+        //        PublicKey::from_file(working_dir.join("assets/users/user-1/public_key.pem"))?;
 
-            let (hash_name, contract_hash) = deploy_contract(
-                &casper_node_rpc_url,
-                &deployer_skey,
-                &deployer_pkey,
-                &contract_to_deploy,
-            )
-            .await?;
-            let contracts_dir = working_dir.join("contracts");
-            fs::create_dir_all(&contracts_dir)?;
-            fs::write(
-                contracts_dir.join(hash_name),
-                // For a ContractHash contract- will always be the prefix
-                contract_hash
-                    .to_formatted_string()
-                    .strip_prefix("contract-")
-                    .unwrap(),
-            )?
-        }
-        Ok(CCTLNetwork { working_dir, nodes })
+        //    let (hash_name, contract_hash) = deploy_contract(
+        //        &casper_node_rpc_url,
+        //        &deployer_skey,
+        //        &deployer_pkey,
+        //        &contract_to_deploy,
+        //    )
+        //    .await?;
+        //    let contracts_dir = working_dir.join("contracts");
+        //    fs::create_dir_all(&contracts_dir)?;
+        //    fs::write(
+        //        contracts_dir.join(hash_name),
+        //        // For a ContractHash contract- will always be the prefix
+        //        contract_hash
+        //            .to_formatted_string()
+        //            .strip_prefix("contract-")
+        //            .unwrap(),
+        //    )?
+        //}
+        Ok(CCTLNetwork {
+            working_dir,
+            casper_nodes,
+            casper_sidecars,
+        })
     }
     /// Get the deployed contract hash for a hash_name that was passed to new_contract
     /// https://docs.rs/casper-contract/latest/casper_contract/contract_api/storage/fn.new_contract.html
