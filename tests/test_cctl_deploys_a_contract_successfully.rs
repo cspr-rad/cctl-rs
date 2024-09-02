@@ -4,7 +4,7 @@ use std::fs;
 use std::path::PathBuf;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
-use casper_types::{runtime_args, ContractHash, RuntimeArgs};
+use casper_types::{contracts::ContractHash, runtime_args};
 use cctl::{CCTLNetwork, DeployableContract};
 
 fn tracing_init() {

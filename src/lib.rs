@@ -15,12 +15,15 @@ use std::{
 use tempfile::tempdir;
 
 use casper_client::{
-    get_account, get_deploy, get_node_status, get_state_root_hash, put_deploy, query_global_state,
-    rpcs::results::ReactorState,
-    types::{DeployBuilder, ExecutableDeployItem, StoredValue, TimeDiff, Timestamp},
-    Error, JsonRpcId, Verbosity,
+    get_account, get_deploy, get_state_root_hash, put_deploy, query_global_state,
+    rpcs::AccountIdentifier, Error, JsonRpcId, Verbosity,
 };
-use casper_types::{ContractHash, ExecutionResult, Key, PublicKey, RuntimeArgs, SecretKey};
+use casper_types::{
+    contracts::ContractHash,
+    execution::{execution_result_v1::ExecutionResultV1, ExecutionResult},
+    Key, PublicKey, RuntimeArgs, SecretKey,
+};
+use casper_types::{DeployBuilder, ExecutableDeployItem, StoredValue, TimeDiff, Timestamp};
 
 use parsers::RawNodeType;
 
@@ -72,6 +75,7 @@ pub struct DeployableContract {
     pub path: PathBuf,
 }
 
+/// Configures the casper-client verbosity level depending on the tracing log level
 pub fn casper_client_verbosity() -> Verbosity {
     if tracing::enabled!(tracing::Level::TRACE) {
         Verbosity::High
@@ -197,49 +201,6 @@ impl CCTLNetwork {
                 }
             });
 
-        // let node_port = casper_sidecars.first().unwrap().port.rpc_port;
-        // let casper_node_rpc_url = format!("http://0.0.0.0:{node_port}/rpc");
-
-        // const MAX_GENESIS_WAIT_TIME: Duration = Duration::from_secs(90);
-        // let start_time = Instant::now();
-        // tracing::info!("Waiting {MAX_GENESIS_WAIT_TIME:?} for the network to pass genesis");
-        // retry(ExponentialBackoff::default(), || async {
-        //     // This prevents retrying forever even after ctrl-c
-        //     let timed_out = start_time.elapsed() > MAX_GENESIS_WAIT_TIME;
-
-        //     get_node_status(
-        //         JsonRpcId::Number(1),
-        //         &casper_node_rpc_url,
-        //         casper_client_verbosity(),
-        //     )
-        //     .await
-        //     .map_err(|err| {
-        //         let elapsed = start_time.elapsed().as_secs();
-        //         tracing::info!(
-        //             "Waited for {elapsed}s to pass genesis, the last reported error was: {err:?}"
-        //         );
-        //         err
-        //     })
-        //     .map_err(|err| match &err {
-        //         err if timed_out => backoff::Error::permanent(anyhow!("Timeout on error: {err:?}")),
-        //         Error::ResponseIsHttpError { .. } | Error::FailedToGetResponse { .. } => {
-        //             backoff::Error::transient(anyhow!(err))
-        //         }
-        //         _ => backoff::Error::permanent(anyhow!(err)),
-        //     })
-        //     .map(|success| match success.result.reactor_state {
-        //         ReactorState::Validate => Ok(()),
-        //         reactor_state if timed_out => Err(backoff::Error::permanent(anyhow!(
-        //             "Node didn't reach the VALIDATE state before timeout: {reactor_state:?}"
-        //         ))),
-        //         _ => Err(backoff::Error::transient(anyhow!(
-        //             "Node didn't reach the VALIDATE state yet"
-        //         ))),
-        //     })?
-        // })
-        // .await
-        // .expect("Waiting for network to pass genesis failed");
-
         tracing::info!("Waiting for block 1");
         let output = Command::new("cctl-chain-await-until-block-n")
             .env("CCTL_ASSETS", &assets_dir)
@@ -249,30 +210,32 @@ impl CCTLNetwork {
         let output = std::str::from_utf8(output.stdout.as_slice()).unwrap();
         tracing::info!("{}", output);
 
-        //if let Some(contract_to_deploy) = contract_to_deploy {
-        //    let deployer_skey =
-        //        SecretKey::from_file(working_dir.join("assets/users/user-1/secret_key.pem"))?;
-        //    let deployer_pkey =
-        //        PublicKey::from_file(working_dir.join("assets/users/user-1/public_key.pem"))?;
+        if let Some(contract_to_deploy) = contract_to_deploy {
+            let rpc_port = casper_sidecars.first().unwrap().port.rpc_port;
+            let casper_sidecar_rpc_url = format!("http://0.0.0.0:{rpc_port}/rpc");
+            let deployer_skey =
+                SecretKey::from_file(working_dir.join("assets/users/user-1/secret_key.pem"))?;
+            let deployer_pkey =
+                PublicKey::from_file(working_dir.join("assets/users/user-1/public_key.pem"))?;
 
-        //    let (hash_name, contract_hash) = deploy_contract(
-        //        &casper_node_rpc_url,
-        //        &deployer_skey,
-        //        &deployer_pkey,
-        //        &contract_to_deploy,
-        //    )
-        //    .await?;
-        //    let contracts_dir = working_dir.join("contracts");
-        //    fs::create_dir_all(&contracts_dir)?;
-        //    fs::write(
-        //        contracts_dir.join(hash_name),
-        //        // For a ContractHash contract- will always be the prefix
-        //        contract_hash
-        //            .to_formatted_string()
-        //            .strip_prefix("contract-")
-        //            .unwrap(),
-        //    )?
-        //}
+            let (hash_name, contract_hash) = deploy_contract(
+                &casper_sidecar_rpc_url,
+                &deployer_skey,
+                &deployer_pkey,
+                &contract_to_deploy,
+            )
+            .await?;
+            let contracts_dir = working_dir.join("contracts");
+            fs::create_dir_all(&contracts_dir)?;
+            fs::write(
+                contracts_dir.join(hash_name),
+                // For a ContractHash contract- will always be the prefix
+                contract_hash
+                    .to_formatted_string()
+                    .strip_prefix("contract-")
+                    .unwrap(),
+            )?
+        }
         Ok(CCTLNetwork {
             working_dir,
             casper_nodes,
@@ -327,8 +290,8 @@ async fn deploy_contract(
         // TODO ideally make the chain-name configurable
         "cspr-dev-cctl",
         contract,
-        contract_deployer_skey,
     )
+    .with_secret_key(contract_deployer_skey)
     .with_standard_payment(MAX_GAS_FEE_PAYMENT_AMOUNT) // max amount allowed to be used on gas fees
     .with_timestamp(Timestamp::now())
     .with_ttl(TimeDiff::from_millis(60_000)) // 1 min
@@ -374,15 +337,29 @@ async fn deploy_contract(
             _ => backoff::Error::permanent(anyhow!(err)),
         })?;
 
-        match response.result.execution_results.first() {
-            Some(result) => match &result.result {
-                ExecutionResult::Failure { error_message, .. } => {
-                    Err(backoff::Error::permanent(anyhow!(error_message.clone())))
+        match response.result.execution_info {
+            Some(execution_info) => match execution_info.execution_result {
+                Some(execution_result) => match &execution_result {
+                    ExecutionResult::V1(execution_result_v1) => match execution_result_v1 {
+                        ExecutionResultV1::Failure { error_message, .. } => {
+                            Err(backoff::Error::permanent(anyhow!(error_message.clone())))
+                        }
+                        ExecutionResultV1::Success { .. } => Ok(()),
+                    }
+                    ExecutionResult::V2(execution_result_v2) => match &execution_result_v2.error_message {
+                        None => Ok(()),
+                        Some(error_message) => Err(backoff::Error::permanent(anyhow!(error_message.clone())))
+                    }
                 }
-                ExecutionResult::Success { .. } => Ok(()),
+                None if timed_out => Err(backoff::Error::permanent(anyhow!(
+                    "Timeout on error: No execution result"
+                ))),
+                None => Err(backoff::Error::transient(anyhow!(
+                    "No execution results there yet"
+                ))),
             },
             None if timed_out => Err(backoff::Error::permanent(anyhow!(
-                "Timeout on error: No execution results"
+                "Timeout on error: No execution info"
             ))),
             None => Err(backoff::Error::transient(anyhow!(
                 "No execution results there yet"
@@ -414,13 +391,13 @@ async fn deploy_contract(
         casper_node_rpc_url,
         casper_client_verbosity,
         Option::None,
-        contract_deployer_pkey.clone(),
+        AccountIdentifier::PublicKey(contract_deployer_pkey.clone()),
     )
     .await
     .map_err(Into::<anyhow::Error>::into)
     .map(|response| response.result.account)?;
 
-    let account_key = Key::Account(*account.account_hash());
+    let account_key = Key::Account(account.account_hash());
     let contract_hash: ContractHash = query_global_state(
         JsonRpcId::Number(1),
         casper_node_rpc_url,
@@ -434,9 +411,9 @@ async fn deploy_contract(
     .and_then(|response| match response.result.stored_value {
         StoredValue::ContractPackage(contract_package) => Ok(*contract_package
             .versions()
+            .values()
             .next()
-            .expect("Expected at least one contract version")
-            .contract_hash()),
+            .expect("Expected at least one contract version")),
         other => Err(anyhow!(
             "Unexpected result type, type is not a CLValue: {:?}",
             other

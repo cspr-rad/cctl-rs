@@ -1,4 +1,4 @@
-use casper_types::{runtime_args, RuntimeArgs};
+use casper_types::runtime_args;
 use clap::Parser;
 use sd_notify::NotifyState;
 use std::path::PathBuf;
