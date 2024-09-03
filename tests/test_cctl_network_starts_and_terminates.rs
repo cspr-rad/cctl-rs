@@ -1,6 +1,6 @@
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
-use casper_client::{get_node_status, JsonRpcId, Verbosity};
+use casper_client::{get_peers, JsonRpcId, Verbosity};
 use cctl::{CCTLNetwork, NodeState};
 
 fn tracing_init() {
@@ -18,14 +18,14 @@ async fn test_cctl_network_starts_and_terminates() {
 
     for node in &network.casper_sidecars {
         if node.state == NodeState::Running {
-            let node_status = get_node_status(
+            let node_status = get_peers(
                 JsonRpcId::Number(1),
-                &format!("http://0.0.0.0:{}", node.port.rpc_port),
+                &format!("http://0.0.0.0:{}/rpc", node.port.rpc_port),
                 Verbosity::High,
             )
             .await
             .unwrap();
-            assert_eq!(node_status.result.reactor_state, "Validate");
+            assert!(!node_status.result.peers.is_empty());
         }
     }
 }

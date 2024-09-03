@@ -18,12 +18,12 @@ fn tracing_init() {
 async fn test_cctl_deploys_a_contract_successfully() {
     tracing_init();
 
-    let contract_wasm_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("test-resources/demo-contract-optimized.wasm");
-    let hash_name = "kairos_contract_package_hash";
+    let contract_wasm_path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test-resources/dummy-contract.wasm");
+    let hash_name = "contract-hash";
     let contract_to_deploy = DeployableContract {
         hash_name: hash_name.to_string(),
-        runtime_args: runtime_args! { "initial_trie_root" => Option::<[u8; 32]>::None },
+        runtime_args: runtime_args! {},
         path: contract_wasm_path,
     };
 

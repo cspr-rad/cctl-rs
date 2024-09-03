@@ -15,15 +15,15 @@ use std::{
 use tempfile::tempdir;
 
 use casper_client::{
-    get_account, get_deploy, get_state_root_hash, put_deploy, query_global_state,
-    rpcs::AccountIdentifier, Error, JsonRpcId, Verbosity,
+    get_deploy, get_state_root_hash, put_deploy, query_global_state, Error, JsonRpcId, Verbosity,
 };
 use casper_types::{
+    account::AccountHash,
     contracts::ContractHash,
     execution::{execution_result_v1::ExecutionResultV1, ExecutionResult},
-    Key, PublicKey, RuntimeArgs, SecretKey,
+    DeployBuilder, ExecutableDeployItem, Key, PublicKey, RuntimeArgs, SecretKey, StoredValue,
+    TimeDiff, Timestamp,
 };
-use casper_types::{DeployBuilder, ExecutableDeployItem, StoredValue, TimeDiff, Timestamp};
 
 use parsers::RawNodeType;
 
@@ -143,8 +143,6 @@ impl CCTLNetwork {
         tracing::info!("{}", output);
         let (_, nodes) = parsers::parse_cctl_infra_net_start_lines(output).unwrap();
 
-        // Match the started nodes and sidecars with their respective ports
-
         tracing::info!("Fetching the networks node ports");
         let output = Command::new("cctl-infra-node-view-ports")
             .env("CCTL_ASSETS", &assets_dir)
@@ -162,6 +160,8 @@ impl CCTLNetwork {
         let output = std::str::from_utf8(output.stdout.as_slice()).unwrap();
         tracing::info!("{}", output);
         let (_, sidecar_ports) = parsers::parse_cctl_infra_sidecar_view_port_lines(output).unwrap();
+
+        // Match the started nodes and sidecars with their respective ports
 
         let (casper_nodes, casper_sidecars): (Vec<CasperNode>, Vec<CasperSidecar>) =
             nodes.iter().partition_map(|node_type| match node_type {
@@ -221,7 +221,7 @@ impl CCTLNetwork {
             let (hash_name, contract_hash) = deploy_contract(
                 &casper_sidecar_rpc_url,
                 &deployer_skey,
-                &deployer_pkey,
+                &deployer_pkey.to_account_hash(),
                 &contract_to_deploy,
             )
             .await?;
@@ -268,7 +268,7 @@ impl Drop for CCTLNetwork {
 async fn deploy_contract(
     casper_node_rpc_url: &str,
     contract_deployer_skey: &SecretKey,
-    contract_deployer_pkey: &PublicKey,
+    contract_deployer_addr: &AccountHash,
     DeployableContract {
         hash_name,
         runtime_args,
@@ -276,7 +276,7 @@ async fn deploy_contract(
     }: &DeployableContract,
 ) -> anyhow::Result<(String, ContractHash)> {
     tracing::info!(
-        "Deploying contract {}: {}",
+        "Deploying contract '{}': {}",
         &hash_name,
         path.to_str().unwrap()
     );
@@ -386,29 +386,26 @@ async fn deploy_contract(
             .ok_or(anyhow!("No state root hash present in response"))
     })?;
 
-    let account = get_account(
-        JsonRpcId::Number(1),
-        casper_node_rpc_url,
-        casper_client_verbosity,
-        Option::None,
-        AccountIdentifier::PublicKey(contract_deployer_pkey.clone()),
-    )
-    .await
-    .map_err(Into::<anyhow::Error>::into)
-    .map(|response| response.result.account)?;
-
-    let account_key = Key::Account(account.account_hash());
+    tracing::info!("Querying global state");
     let contract_hash: ContractHash = query_global_state(
         JsonRpcId::Number(1),
         casper_node_rpc_url,
         casper_client_verbosity,
         casper_client::rpcs::GlobalStateIdentifier::StateRootHash(state_root_hash), // fetches recent blocks state root hash
-        account_key,
+        Key::AddressableEntity(casper_types::EntityAddr::Account(contract_deployer_addr.0)),
         vec![hash_name.clone()],
     )
     .await
     .map_err(Into::<anyhow::Error>::into)
     .and_then(|response| match response.result.stored_value {
+        StoredValue::Package(package) => Ok(ContractHash::from(
+            package
+                .versions()
+                .contract_hashes()
+                .next()
+                .expect("")
+                .value(),
+        )),
         StoredValue::ContractPackage(contract_package) => Ok(*contract_package
             .versions()
             .values()
