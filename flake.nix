@@ -41,7 +41,10 @@
       ];
       perSystem = { self', inputs', pkgs, lib, ... }:
         let
-          rustToolchain = inputs'.fenix.packages.stable.toolchain;
+          rustToolchain = with inputs'.fenix.packages; combine [
+            stable.toolchain
+            targets.wasm32-unknown-unknown.stable.rust-std
+          ];
           craneLib = (inputs.crane.mkLib pkgs).overrideToolchain rustToolchain;
 
           cctl = inputs'.cctl.packages.cctl;
@@ -77,6 +80,31 @@
               cctl
             ];
           };
+
+          contractAttrs = {
+            pname = "dummy-contract";
+            src = lib.cleanSourceWith {
+              src = lib.fileset.toSource {
+                root = ./dummy-contract;
+                fileset = lib.fileset.unions [
+                  ./dummy-contract
+                ];
+              };
+            };
+            cargoExtraArgs = "--target wasm32-unknown-unknown";
+            CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_LINKER = "lld";
+            nativeBuildInputs = [ pkgs.binaryen pkgs.lld ];
+            doCheck = false;
+            # optimize wasm
+            postInstall = ''
+              directory="$out/bin/"
+              for file in "$directory"*.wasm; do
+                if [ -e "$file" ]; then
+                  wasm-opt -Oz --strip-debug --signext-lowering "$file"
+                fi
+              done
+            '';
+          };
         in
         {
           devShells.default = pkgs.mkShell {
@@ -85,6 +113,9 @@
           };
 
           packages = {
+            # Used for testing purposes
+            dummy-contract = craneLib.buildPackage contractAttrs;
+
             cctl-rs-deps = craneLib.buildDepsOnly cctlAttrs;
 
             cctl-rs-docs = craneLib.cargoDoc (cctlAttrs // {
