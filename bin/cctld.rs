@@ -29,7 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Some((hash_name, path)) => cctl::DeployableContract {
                 hash_name: hash_name.to_string(),
                 // FIXME at some point we want to make this parametrizable
-                runtime_args: runtime_args! { "initial_trie_root" => Option::<[u8; 32]>::None },
+                runtime_args: runtime_args! {},
                 path: PathBuf::from(&path),
             },
             None => panic!("Error parsing the provided deploy contracts argument."),
