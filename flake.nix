@@ -28,7 +28,7 @@
     advisory-db.url = "github:rustsec/advisory-db";
     advisory-db.flake = false;
     # with casper-node 2.0.0-rc4 https://github.com/casper-network/cctl/pull/44/commits/058de6887c691dac0b20284fba1f78bcd39187ef
-    cctl.url = "github:casper-network/cctl";
+    cctl.url = "github:cspr-rad/cctl/use-client-feat-2.0";
     csprpkgs.follows = "cctl/csprpkgs";
   };
 
