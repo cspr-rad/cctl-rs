@@ -3,6 +3,7 @@ use clap::Parser;
 use sd_notify::NotifyState;
 use std::path::PathBuf;
 use tokio::signal;
+use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
 pub struct Cli {
@@ -18,6 +19,10 @@ pub struct Cli {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .with_writer(std::io::stderr)
+        .init();
     let cli = Cli::parse();
     let deploy_contract = cli.deploy_contract.map(|deploy_contracts_arg| {
         match deploy_contracts_arg.split_once(':') {
