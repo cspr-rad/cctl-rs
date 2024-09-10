@@ -27,8 +27,9 @@
     crane.inputs.nixpkgs.follows = "nixpkgs";
     advisory-db.url = "github:rustsec/advisory-db";
     advisory-db.flake = false;
-    cctl.url = "github:casper-network/cctl/947c34b991e37476db82ccfa2bd7c0312c1a91d7";
-    csprpkgs.url = "github:cspr-rad/csprpkgs/3bc835d3b73a5d5a5829f3b8506f51a9cd098abd";
+    # with casper-node 2.0.0-rc4 https://github.com/casper-network/cctl/pull/44/commits/058de6887c691dac0b20284fba1f78bcd39187ef
+    cctl.url = "github:cspr-rad/cctl/use-client-feat-2.0";
+    csprpkgs.follows = "cctl/csprpkgs";
   };
 
   outputs = inputs@{ flake-parts, treefmt-nix, ... }:
@@ -37,14 +38,14 @@
       imports = [
         treefmt-nix.flakeModule
         ./nixos
+        ./dummy-contract
       ];
       perSystem = { self', inputs', pkgs, lib, ... }:
         let
           rustToolchain = inputs'.fenix.packages.stable.toolchain;
           craneLib = (inputs.crane.mkLib pkgs).overrideToolchain rustToolchain;
 
-          # revision 3bc835d contains casper-node 1.5.7
-          cctl = inputs'.cctl.packages.cctl.override { casper-node = inputs'.csprpkgs.packages.casper-node; };
+          cctl = inputs'.cctl.packages.cctl;
 
           cctlAttrs = {
             pname = "cctl-rs";

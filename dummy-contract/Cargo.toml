@@ -1,0 +1,9 @@
+[package]
+name = "dummy-contract"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+casper-contract = { git = "https://github.com/casper-network/casper-node", branch = "release-2.0.0-rc4", default-features = false}
+casper-types= { git = "https://github.com/casper-network/casper-node", branch = "release-2.0.0-rc4", default-features = false }
+serde = "1"

@@ -11,7 +11,7 @@
             {
               inherit (inputs.csprpkgs.packages.${pkgs.system}) casper-client-rs;
               cctlModule = self.nixosModules.cctl;
-              contractWasm = ../test-resources/demo-contract-optimized.wasm;
+              contractWasm = "${self.packages.${pkgs.system}.dummy-contract}/bin/dummy-contract.wasm";
             };
       };
     nixosModules = {

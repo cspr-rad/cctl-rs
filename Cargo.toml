@@ -1,13 +1,13 @@
 [package]
 name = "cctl-rs"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 
 [[bin]]
 name = "cctld"
 path = "bin/cctld.rs"
-version = "0.1.0"
+version = "0.2.0"
 test = false
 bench = false
 
@@ -20,12 +20,18 @@ path = "src/lib.rs"
 anyhow = "1"
 backoff = { version = "0.4", features = ["tokio", "futures"]}
 clap = { version = "4", features = ["derive"] }
-casper-client = "2.0"
-casper-types = "3.0"
+casper-client = { git = "https://github.com/casper-ecosystem/casper-client-rs", branch = "feat-track-node-2.0"}
+casper-types= { git = "https://github.com/casper-network/casper-node", branch = "release-2.0.0-rc4" }
+itertools = "0.13"
 nom = "7"
 hex = "0.4"
 sd-notify = "0.4"
+serde = "1"
+serde_json = "1"
 tokio = { version = "1", features = [ "full", "tracing", "macros" ] }
 tempfile = "3"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["std", "env-filter"] }
+
+[patch.crates-io]
+casper-types = { git = "https://github.com/casper-network/casper-node", branch = "release-2.0.0-rc4" }
