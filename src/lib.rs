@@ -4,10 +4,12 @@ use anyhow::anyhow;
 use backoff::{future::retry, ExponentialBackoff};
 use hex::FromHex;
 use itertools::{Either, Itertools};
+use serde::{Deserialize, Serialize};
 use std::env;
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::Command;
+use std::str::FromStr;
 use std::{
     fs,
     time::{Duration, Instant},
@@ -21,8 +23,8 @@ use casper_types::{
     account::AccountHash,
     contracts::ContractHash,
     execution::{execution_result_v1::ExecutionResultV1, ExecutionResult},
-    DeployBuilder, ExecutableDeployItem, Key, PublicKey, RuntimeArgs, SecretKey, StoredValue,
-    TimeDiff, Timestamp,
+    runtime_args, DeployBuilder, ExecutableDeployItem, Key, PublicKey, RuntimeArgs, SecretKey,
+    StoredValue, TimeDiff, Timestamp,
 };
 
 use parsers::RawNodeType;
@@ -68,11 +70,20 @@ pub struct CCTLNetwork {
     pub casper_sidecars: Vec<CasperSidecar>,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
 pub struct DeployableContract {
     /// This is the named key under which the contract hash is located
     pub hash_name: String,
-    pub runtime_args: RuntimeArgs,
+    pub runtime_args: Option<RuntimeArgs>,
     pub path: PathBuf,
+}
+
+impl FromStr for DeployableContract {
+    type Err = serde_json::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str(s)
+    }
 }
 
 /// Configures the casper-client verbosity level depending on the tracing log level
@@ -98,7 +109,7 @@ impl CCTLNetwork {
     /// Ensure that two instances of this function are not running at the same time even in different processes.
     pub async fn run(
         working_dir: Option<PathBuf>,
-        contract_to_deploy: Option<DeployableContract>,
+        contracts_to_deploy: Option<Vec<DeployableContract>>,
         chainspec_path: Option<PathBuf>,
         config_path: Option<PathBuf>,
     ) -> anyhow::Result<CCTLNetwork> {
@@ -218,23 +229,26 @@ impl CCTLNetwork {
             let deployer_pkey =
                 PublicKey::from_file(working_dir.join("assets/users/user-1/public_key.pem"))?;
 
-            let (hash_name, contract_hash) = deploy_contract(
-                &casper_sidecar_rpc_url,
-                &deployer_skey,
-                &deployer_pkey.to_account_hash(),
-                &contract_to_deploy,
-            )
-            .await?;
             let contracts_dir = working_dir.join("contracts");
             fs::create_dir_all(&contracts_dir)?;
-            fs::write(
-                contracts_dir.join(hash_name),
-                // For a ContractHash contract- will always be the prefix
-                contract_hash
-                    .to_formatted_string()
-                    .strip_prefix("contract-")
-                    .unwrap(),
-            )?
+
+            for contract_to_deploy in contracts_to_deploy {
+                let (hash_name, contract_hash) = deploy_contract(
+                    &casper_sidecar_rpc_url,
+                    &deployer_skey,
+                    &deployer_pkey.to_account_hash(),
+                    &contract_to_deploy,
+                )
+                .await?;
+                fs::write(
+                    contracts_dir.join(hash_name),
+                    // For a ContractHash contract- will always be the prefix
+                    contract_hash
+                        .to_formatted_string()
+                        .strip_prefix("contract-")
+                        .unwrap(),
+                )?
+            }
         }
         Ok(CCTLNetwork {
             working_dir,
@@ -284,8 +298,8 @@ async fn deploy_contract(
     let casper_client_verbosity = casper_client_verbosity();
 
     let contract_bytes = fs::read(path)?;
-    let contract =
-        ExecutableDeployItem::new_module_bytes(contract_bytes.into(), runtime_args.clone());
+    let runtime_args = runtime_args.clone().unwrap_or(runtime_args! {});
+    let contract = ExecutableDeployItem::new_module_bytes(contract_bytes.into(), runtime_args);
     let deploy = DeployBuilder::new(
         // TODO ideally make the chain-name configurable
         "cspr-dev-cctl",

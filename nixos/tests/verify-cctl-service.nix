@@ -14,7 +14,13 @@ nixosTest {
       ];
       services.cctl = {
         enable = true;
-        contract = { "contract-hash" = contractWasm; };
+        contracts = [
+          {
+            hash_name = "contract-hash";
+            path = contractWasm;
+            runtime_args = null;
+          }
+        ];
       };
       networking.firewall.allowedTCPPorts = [ 80 config.services.cctl.port ];
     };

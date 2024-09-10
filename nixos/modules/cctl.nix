@@ -62,17 +62,29 @@ in
       '';
     };
 
-    contract = mkOption {
-      type = types.nullOr (types.attrsOf types.path);
+    contracts = mkOption {
       default = null;
-      example = { "contract hash name" = "/path/to/contract.wasm"; };
-      description = ''
-        The wasm compiled contract that should be deployed once the network is up and ready.
-        The name of the attribute should correspond to the contracts hash name when calling
-        https://docs.rs/casper-contract/latest/casper_contract/contract_api/storage/fn.new_locked_contract.html
-      '';
+      type = types.nullOr (types.listOf (types.submodule {
+        options = {
+          hash_name = mkOption {
+            type = types.str;
+            description = ''
+              The contracts hash name which was provided when calling
+              https://docs.rs/casper-contract/latest/casper_contract/contract_api/storage/fn.new_locked_contract.html
+            '';
+          };
+          path = mkOption {
+            type = types.path;
+            description = "The wasm compiled contract that should be deployed once the network is up and ready.";
+          };
+          runtime_args = mkOption {
+            default = null;
+            type = types.nullOr types.attrs;
+            description = "The runtime arguments expected by this contract.";
+          };
+        };
+      }));
     };
-
   };
 
   config = mkIf cfg.enable {
@@ -83,9 +95,9 @@ in
           "--working-dir"
           cfg.workingDirectory
         ]
-        ++ optionals (!builtins.isNull cfg.contract) ([
-          "--deploy-contract"
-        ] ++ (lib.mapAttrsToList (hash_name: contract_path: "${hash_name}:${contract_path}") cfg.contract))
+        ++ optionals (!builtins.isNull cfg.contracts) ([
+          "--deploy-contracts"
+        ] ++ (lib.map (contract: builtins.toJSON contract) cfg.contracts))
         ++ optionals (!builtins.isNull cfg.chainspec) [
           "--chainspec-path"
           cfg.chainspec

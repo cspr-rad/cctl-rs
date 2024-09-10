@@ -299,6 +299,8 @@ dependencies = [
  "itertools 0.13.0",
  "nom",
  "sd-notify",
+ "serde",
+ "serde_json",
  "tempfile",
  "tokio",
  "tracing",

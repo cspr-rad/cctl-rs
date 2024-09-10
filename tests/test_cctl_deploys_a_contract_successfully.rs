@@ -4,7 +4,7 @@ use std::fs;
 use std::path::PathBuf;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
-use casper_types::{contracts::ContractHash, runtime_args};
+use casper_types::contracts::ContractHash;
 use cctl::{CCTLNetwork, DeployableContract};
 
 fn tracing_init() {
@@ -23,11 +23,11 @@ async fn test_cctl_deploys_a_contract_successfully() {
     let hash_name = "contract-hash";
     let contract_to_deploy = DeployableContract {
         hash_name: hash_name.to_string(),
-        runtime_args: runtime_args! {},
+        runtime_args: None,
         path: contract_wasm_path,
     };
 
-    let network = CCTLNetwork::run(None, Some(contract_to_deploy), None, None)
+    let network = CCTLNetwork::run(None, Some(vec![contract_to_deploy]), None, None)
         .await
         .unwrap();
     let expected_contract_hash_path = network.working_dir.join("contracts").join(hash_name);
