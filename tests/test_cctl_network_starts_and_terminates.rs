@@ -19,6 +19,13 @@ async fn test_cctl_network_starts_and_terminates() {
     for node in &network.casper_sidecars {
         if node.state == NodeState::Running {
             // FIXME: getting the status is currently broken beteen sidecar <-> node
+            // let response = get_node_status(
+            //   JsonRpcId::Number(1),
+            //   &format!("http://0.0.0.0:{}/rpc", node.port.rpc_port),
+            //  )
+            //  .await
+            //  .unwrap();
+            //  assert_eq!(response.result.reactor_state, ReactorState::Validate);
             let response = get_peers(
                 JsonRpcId::Number(1),
                 &format!("http://0.0.0.0:{}/rpc", node.port.rpc_port),
