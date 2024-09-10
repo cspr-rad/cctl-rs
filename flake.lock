@@ -56,11 +56,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1725878990,
-        "narHash": "sha256-0OiJPOt9E7qPZ9Xg0iim9eDLdPS+dkLk/E1uznbBIQ8=",
+        "lastModified": 1725966561,
+        "narHash": "sha256-8U8aQnbPdwNKfuz4FpgCSqlKmYJ2aUCwC1zn19mEfBc=",
         "owner": "cspr-rad",
         "repo": "cctl",
-        "rev": "034fb32a50a5576f59ecdc7854d968d8a94d115d",
+        "rev": "407b24d689006e79328c23c68c17a2180a69f2ed",
         "type": "github"
       },
       "original": {
@@ -97,11 +97,11 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1725878521,
-        "narHash": "sha256-pUTxnEs+1SRvZa9eILOLQ94U6BMwIqddkPoHW3PS/0c=",
+        "lastModified": 1725966511,
+        "narHash": "sha256-efgD6Ia/q7Q7V7m4HcujzZwK8Q2wcktE2JVdNNrxf6c=",
         "owner": "cspr-rad",
         "repo": "csprpkgs",
-        "rev": "67c6cecc5590b4ddb00db5e6c33566861b85418b",
+        "rev": "ffd1c29015183c6134365d7f4a18e7d2357bba65",
         "type": "github"
       },
       "original": {
