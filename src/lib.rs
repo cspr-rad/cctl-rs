@@ -221,7 +221,10 @@ impl CCTLNetwork {
         let output = std::str::from_utf8(output.stdout.as_slice()).unwrap();
         tracing::info!("{}", output);
 
-        if let Some(contract_to_deploy) = contract_to_deploy {
+        // FIXME: remove once sidecar <-> node communication is more reliable
+        std::thread::sleep(std::time::Duration::from_secs(2));
+
+        if let Some(contracts_to_deploy) = contracts_to_deploy {
             let rpc_port = casper_sidecars.first().unwrap().port.rpc_port;
             let casper_sidecar_rpc_url = format!("http://0.0.0.0:{rpc_port}/rpc");
             let deployer_skey =
