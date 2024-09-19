@@ -5,12 +5,10 @@
     extra-substituters = [
       "https://crane.cachix.org"
       "https://nix-community.cachix.org"
-      "https://cspr.cachix.org"
     ];
     extra-trusted-public-keys = [
       "crane.cachix.org-1:8Scfpmn9w+hGdXH/Q9tTLiYAE/2dnJYRJP7kl80GuRk="
       "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
-      "cspr.cachix.org-1:vEZlmbOsmTXkmEi4DSdqNVyq25VPNpmSm6qCs4IuTgE="
     ];
   };
 
